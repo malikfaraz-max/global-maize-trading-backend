@@ -295,7 +295,73 @@ app.get("/api/health", (req, res) => {
     res.status(503).json({ ok: false, status: "unhealthy", database: "disconnected" });
   }
 });
+// ---- Chad AI assistant ----
+const OpenAI = require("openai");
 
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+});
+
+app.post("/api/chad", async (req, res) => {
+  try {
+    const { message, history = [] } = req.body || {};
+
+    if (!message || typeof message !== "string") {
+      return res.status(400).json({
+        error: "Message is required."
+      });
+    }
+
+    const safeHistory = Array.isArray(history)
+      ? history
+          .filter(x =>
+            x &&
+            (x.role === "user" || x.role === "assistant") &&
+            typeof x.content === "string"
+          )
+          .slice(-10)
+      : [];
+
+    const response = await openai.responses.create({
+      model: process.env.CHAD_MODEL || "gpt-5.6-luna",
+      instructions: `
+You are Chad, the official website assistant for Global Maize Trading.
+
+Company:
+- Global Maize Trading
+- Based in Multan, Pakistan
+- Supplies Pakistan-grown premium yellow maize
+- Commercial order size: 500 to 5,000 metric tons
+- WhatsApp: +92 345 0306973
+- Email: malikfarazakramofficial@gmail.com
+
+Be helpful, professional and concise.
+For prices, freight, payment terms, availability, contracts or shipment-specific commitments,
+do not invent information. Tell the customer to contact the trading team directly.
+
+Do not claim to have access to private company systems unless the application actually provides that data.
+      `,
+      input: [
+        ...safeHistory,
+        {
+          role: "user",
+          content: message
+        }
+      ]
+    });
+
+    res.json({
+      answer: response.output_text || "How can I help you?"
+    });
+
+  } catch (err) {
+    console.error("Chad API error:", err);
+
+    res.status(500).json({
+      error: "Chad is temporarily unavailable."
+    });
+  }
+});
 // JSON 404 response for unknown API routes.
 app.use("/api", (req, res) => {
   res.status(404).json({ error: "API route not found", path: req.path });
