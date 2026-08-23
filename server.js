@@ -66,7 +66,11 @@ app.get("/", (req, res) => {
   res.json({ service: "Global Maize Trading API", status: "online", health: "/api/health" });
 });
 
-app.use("/admin", express.static(path.join(__dirname, "public", "admin")));
+const adminPath = path.join(__dirname, "public", "admin");
+app.use("/admin", express.static(adminPath));
+app.get(["/admin", "/admin/"], (req, res) => {
+  res.sendFile(path.join(adminPath, "index.html"));
+});
 
 // ---- Public: submit a quote request ----
 const VALID_STATUSES = ["New", "Quoted", "Deposit Paid", "Confirmed", "Shipped", "Cancelled"];
