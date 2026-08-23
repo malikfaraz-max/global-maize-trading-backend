@@ -53,8 +53,23 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
 
 app.use(cors({
   origin(origin, callback) {
-    // allow same-origin/non-browser requests (no Origin header) and admin dashboard on this server itself
-    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    // Requests without an Origin header (server-to-server, curl, browser navigation) are fine.
+    if (!origin) return callback(null, true);
+
+    // The admin dashboard is served by this same backend. Browsers send an Origin
+    // header for its POST/PATCH requests, so allow the Railway host automatically.
+    // This prevents the admin login from being turned into a 500 by the CORS layer.
+    const railwayDomain = process.env.RAILWAY_PUBLIC_DOMAIN
+      ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
+      : null;
+    const railwayOrigin = railwayDomain || null;
+
+    if (allowedOrigins.includes(origin) || (railwayOrigin && origin === railwayOrigin)) {
+      return callback(null, true);
+    }
+
+    // Also allow the current Railway deployment hostname when Railway exposes it
+    // through RAILWAY_PUBLIC_DOMAIN; otherwise reject unknown browser origins.
     callback(new Error("Not allowed by CORS: " + origin));
   }
 }));
@@ -120,13 +135,18 @@ app.post("/api/quotes", (req, res) => {
 
 // ---- Admin auth ----
 app.post("/api/admin/login", (req, res) => {
-  const { username, password } = req.body || {};
-  const user = db.prepare("SELECT * FROM admin_users WHERE username = ?").get(username || "");
-  if (!user || !bcrypt.compareSync(password || "", user.password_hash)) {
-    return res.status(401).json({ error: "Invalid username or password." });
+  try {
+    const { username, password } = req.body || {};
+    const user = db.prepare("SELECT * FROM admin_users WHERE username = ?").get(username || "");
+    if (!user || !bcrypt.compareSync(password || "", user.password_hash)) {
+      return res.status(401).json({ error: "Invalid username or password." });
+    }
+    const token = jwt.sign({ sub: user.id, username: user.username }, JWT_SECRET, { expiresIn: "12h" });
+    res.json({ token });
+  } catch (err) {
+    console.error("Admin login failed:", err);
+    res.status(500).json({ error: "Admin login failed on the server." });
   }
-  const token = jwt.sign({ sub: user.id, username: user.username }, JWT_SECRET, { expiresIn: "12h" });
-  res.json({ token });
 });
 
 function requireAuth(req, res, next) {
