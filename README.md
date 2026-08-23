@@ -1,55 +1,53 @@
 # Global Maize Trading — Backend
 
-A small API that stores every quote request in a real database, plus a
-password-protected admin dashboard to manage them.
+Production-ready Express API for quote submissions and an authenticated admin dashboard.
 
-## What this replaces
+## API
 
-Your quote form currently posts to Formspree. Once this is deployed and
-the frontend is updated, it will post here instead — every submission
-becomes a permanent row you can see, search, and update the status of.
+- `GET /` — service status
+- `GET /api/health` — backend + SQLite health check
+- `POST /api/quotes` — create a quote request
+- `POST /api/admin/login` — admin login
+- `GET /api/admin/quotes` — authenticated quote list
+- `PATCH /api/admin/quotes/:id` — authenticated quote update
+- `/admin/` — admin dashboard
 
-## Local test run
+## Railway deployment
 
+1. Push this folder to the GitHub repository connected to Railway.
+2. Railway should use Node 22.x from `package.json`, `.nvmrc`, and `.node-version`.
+3. Set these Railway Variables:
+   - `JWT_SECRET` = a long random secret
+   - `ALLOWED_ORIGINS` = your real frontend URL(s), comma-separated
+   - `NODE_ENV` = `production`
+4. Deploy.
+5. Test `https://YOUR-RAILWAY-DOMAIN/api/health`.
+6. Test `https://YOUR-RAILWAY-DOMAIN/` — it should return JSON instead of `Cannot GET /`.
+
+## Important: SQLite persistence
+
+The current backend uses SQLite. If Railway restarts/redeploys without persistent storage, `data.sqlite` can be lost. For a real production launch, attach a Railway volume and configure the SQLite database path to that persistent mount, or migrate to PostgreSQL. PostgreSQL is the recommended long-term option if the site will receive meaningful production traffic.
+
+## Create the first admin
+
+Run this where the backend's SQLite database is available:
+
+```bash
+node create-admin.js admin "CHANGE-THIS-TO-A-STRONG-PASSWORD"
 ```
-npm install
-cp .env.example .env      # then edit .env with a real JWT_SECRET
-npm run create-admin -- yourusername "a-strong-password"
-npm start
+
+Then open:
+
+```text
+https://YOUR-RAILWAY-DOMAIN/admin/
 ```
 
-Visit http://localhost:4000/admin and log in with the username/password
-you just created. Test the quote API with:
+## Frontend connection
 
-```
-curl -X POST http://localhost:4000/api/quotes -H "Content-Type: application/json" -d '{
-  "name":"Test Buyer","email":"test@example.com","phone":"+923001234567",
-  "quantity_tons":600,"destination_country":"Netherlands"
-}'
+The website's quote form should submit JSON to:
+
+```text
+POST https://YOUR-RAILWAY-DOMAIN/api/quotes
 ```
 
-## Deploying (Render — free tier works for this)
-
-1. Push this `backend` folder to its own GitHub repo (separate from the
-   website repo).
-2. On render.com, create a new **Web Service**, connect that repo.
-3. Build command: `npm install`. Start command: `npm start`.
-4. Add environment variables in Render's dashboard: `JWT_SECRET`,
-   `ALLOWED_ORIGINS` (your real domain + your `*.github.io` URL).
-5. **Important — SQLite persistence:** Render's free web services have
-   an ephemeral disk, meaning `data.sqlite` is wiped on every redeploy
-   or restart. For a real launch, either:
-   - add a Render **persistent disk** (small paid add-on, mounts a
-     folder that survives restarts — point `db.js` at that folder), or
-   - migrate to a hosted Postgres database once you're past testing
-     (Render has a free Postgres tier with an expiry — ask me when
-     you're ready and I'll adapt `db.js` to use it instead of SQLite).
-6. Once deployed, run the admin-creation command once against the live
-   server (Render's dashboard has a "Shell" tab for this), then log in
-   at `https://your-backend.onrender.com/admin`.
-
-## Connecting the website to this backend
-
-The quote form on the main site needs its submit handler pointed at
-`https://your-backend.onrender.com/api/quotes` instead of Formspree.
-I'll make that change once you tell me your backend's live URL.
+The frontend must be included in `ALLOWED_ORIGINS`.

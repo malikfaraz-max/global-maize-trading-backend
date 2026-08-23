@@ -38,7 +38,13 @@ app.use(cors({
   }
 }));
 
-app.use(express.json());
+app.use(express.json({ limit: "100kb" }));
+
+// Simple service-discovery endpoint. The root URL should not return "Cannot GET /".
+app.get("/", (req, res) => {
+  res.json({ service: "Global Maize Trading API", status: "online", health: "/api/health" });
+});
+
 app.use("/admin", express.static(path.join(__dirname, "public", "admin")));
 
 // ---- Public: submit a quote request ----
@@ -128,6 +134,36 @@ app.patch("/api/admin/quotes/:id", requireAuth, (req, res) => {
   res.json(db.prepare("SELECT * FROM quotes WHERE id = ?").get(req.params.id));
 });
 
-app.get("/api/health", (req, res) => res.json({ ok: true }));
+app.get("/api/health", (req, res) => {
+  try {
+    db.prepare("SELECT 1").get();
+    res.json({ ok: true, status: "healthy", database: "connected" });
+  } catch (err) {
+    console.error("Health check failed:", err);
+    res.status(503).json({ ok: false, status: "unhealthy", database: "disconnected" });
+  }
+});
 
-app.listen(PORT, () => console.log(`Global Maize Trading backend running on port ${PORT}`));
+// JSON 404 response for unknown API routes.
+app.use("/api", (req, res) => {
+  res.status(404).json({ error: "API route not found", path: req.path });
+});
+
+// Final error handler so unexpected errors don't crash the process.
+app.use((err, req, res, next) => {
+  console.error("Unhandled request error:", err);
+  if (res.headersSent) return next(err);
+  res.status(500).json({ error: "Internal server error" });
+});
+
+const server = app.listen(PORT, () => console.log(`Global Maize Trading backend running on port ${PORT}`));
+
+function shutdown(signal) {
+  console.log(`${signal} received. Shutting down gracefully...`);
+  server.close(() => {
+    try { db.close(); } catch {}
+    process.exit(0);
+  });
+}
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
