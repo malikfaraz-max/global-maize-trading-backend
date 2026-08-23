@@ -190,7 +190,102 @@ app.patch("/api/admin/quotes/:id", requireAuth, (req, res) => {
 
   res.json(db.prepare("SELECT * FROM quotes WHERE id = ?").get(req.params.id));
 });
+// ---- Chad AI assistant ----
+const OpenAI = require("openai");
 
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+});
+
+app.post("/api/chad", async (req, res) => {
+  try {
+    const { message, history } = req.body || {};
+
+    if (!message || typeof message !== "string") {
+      return res.status(400).json({
+        error: "Message is required."
+      });
+    }
+
+    if (!process.env.OPENAI_API_KEY) {
+      console.error("OPENAI_API_KEY is missing.");
+      return res.status(500).json({
+        error: "Chad AI is not configured on the server."
+      });
+    }
+
+    const safeHistory = Array.isArray(history)
+      ? history
+          .filter(
+            x =>
+              x &&
+              (x.role === "user" || x.role === "assistant") &&
+              typeof x.content === "string"
+          )
+          .slice(-10)
+      : [];
+
+    const messages = [
+      {
+        role: "system",
+        content: `
+You are Chad, the official AI website assistant for Global Maize Trading.
+
+Company:
+- Global Maize Trading
+- Based in Multan, Pakistan
+- Supplies Pakistan-grown premium yellow maize
+- Commercial order size: 500 to 5,000 metric tons
+- International wholesale buyers are welcome
+- WhatsApp: +92 345 0306973
+- Email: malikfarazakramofficial@gmail.com
+
+Your job:
+1. Answer questions about Global Maize Trading clearly and professionally.
+2. Answer general questions when useful.
+3. Never invent prices, freight rates, payment terms, availability, contracts,
+   shipment commitments, or other shipment-specific commercial information.
+4. For current prices, freight, payment terms or availability, tell the user
+   that the trading team must confirm those details.
+5. Never claim that a quotation has been submitted unless the website's quote
+   form actually submitted it.
+6. Keep answers concise and helpful.
+7. You are a website assistant, not a financial, legal, or medical advisor.
+        `.trim()
+      },
+      ...safeHistory,
+      {
+        role: "user",
+        content: message.trim()
+      }
+    ];
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages,
+      temperature: 0.3,
+      max_tokens: 500
+    });
+
+    const answer =
+      completion.choices?.[0]?.message?.content?.trim();
+
+    if (!answer) {
+      throw new Error("OpenAI returned an empty response.");
+    }
+
+    res.json({
+      answer
+    });
+
+  } catch (err) {
+    console.error("Chad AI error:", err);
+
+    res.status(500).json({
+      error: "Chad is temporarily unavailable."
+    });
+  }
+});
 app.get("/api/health", (req, res) => {
   try {
     db.prepare("SELECT 1").get();
