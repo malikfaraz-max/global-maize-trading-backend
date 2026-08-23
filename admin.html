@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Admin | Global Maize Trading</title>
+<style>
+:root{--navy:#16233a;--wheat:#b9853a;--wheatd:#8a5f22;--paper:#f3ecdb;--card:#fbf8ef;--ink:#221d14;--muted:#726a56;--line:#ddd0b1}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,sans-serif;background:var(--paper);color:var(--ink)}
+.bar{background:var(--navy);color:#fff;padding:16px 24px;font-weight:700;display:flex;justify-content:space-between;align-items:center}
+.bar button{background:transparent;border:1px solid #ffffff55;color:#fff;padding:8px 14px;border-radius:3px;cursor:pointer}
+.wrap{max-width:1400px;margin:0 auto;padding:24px}
+.login{max-width:340px;margin:80px auto;background:var(--card);border:1px solid var(--line);border-radius:6px;padding:30px}
+.login h1{font-size:18px;margin:0 0 18px}
+.login input{width:100%;padding:11px;margin-bottom:12px;border:1px solid var(--line);border-radius:3px;font-size:14px}
+.login button{width:100%;padding:12px;background:var(--navy);color:#fff;border:0;border-radius:3px;font-weight:700;cursor:pointer}
+.err{color:#a33;font-size:13px;margin-bottom:10px;display:none}
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);font-size:13px}
+th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{background:#eee4cc;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+select,input.cell{font-size:12.5px;padding:5px;border:1px solid var(--line);border-radius:3px;width:100%}
+.save{background:var(--wheat);border:0;color:#1b1608;padding:6px 10px;border-radius:3px;cursor:pointer;font-weight:700;font-size:11.5px}
+.tag{padding:3px 8px;border-radius:20px;font-size:11px;font-weight:700}
+.muted{color:var(--muted)}
+.loading{padding:60px;text-align:center;color:var(--muted)}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const API = ""; // same origin as this page — leave blank when admin is served by the backend itself
+let token = localStorage.getItem("gmt_token") || null;
+
+function el(html){ const d=document.createElement("div"); d.innerHTML=html; return d.firstElementChild; }
+
+async function login(username, password){
+  const res = await fetch(API + "/api/admin/login", {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({username, password})
+  });
+  const data = await res.json();
+  if(!res.ok) throw new Error(data.error || "Login failed");
+  token = data.token;
+  localStorage.setItem("gmt_token", token);
+}
+
+async function fetchQuotes(){
+  const res = await fetch(API + "/api/admin/quotes", { headers:{ Authorization: "Bearer " + token } });
+  if(res.status === 401){ logout(); throw new Error("Session expired"); }
+  return res.json();
+}
+
+async function updateQuote(id, patch){
+  const res = await fetch(API + "/api/admin/quotes/" + id, {
+    method:"PATCH", headers:{"Content-Type":"application/json", Authorization:"Bearer " + token},
+    body: JSON.stringify(patch)
+  });
+  return res.json();
+}
+
+function logout(){ token=null; localStorage.removeItem("gmt_token"); render(); }
+
+const STATUSES = ["New","Quoted","Deposit Paid","Confirmed","Shipped","Cancelled"];
+
+function renderLogin(){
+  const app = document.getElementById("app");
+  app.innerHTML = "";
+  app.appendChild(el(`
+    <div class="login">
+      <h1>Global Maize Trading — Admin</h1>
+      <div class="err" id="err"></div>
+      <input id="u" placeholder="Username" autocomplete="username">
+      <input id="p" placeholder="Password" type="password" autocomplete="current-password">
+      <button id="go">Log in</button>
+    </div>
+  `));
+  document.getElementById("go").onclick = async () => {
+    const err = document.getElementById("err");
+    err.style.display = "none";
+    try {
+      await login(document.getElementById("u").value, document.getElementById("p").value);
+      render();
+    } catch(e){ err.textContent = e.message; err.style.display = "block"; }
+  };
+}
+
+async function renderDashboard(){
+  const app = document.getElementById("app");
+  app.innerHTML = `<div class="bar"><span>Global Maize Trading — Quotes</span><button id="logout">Log out</button></div><div class="wrap"><div class="loading">Loading...</div></div>`;
+  document.getElementById("logout").onclick = logout;
+
+  let rows;
+  try { rows = await fetchQuotes(); } catch(e){ return; }
+
+  const wrap = document.querySelector(".wrap");
+  if(!rows.length){ wrap.innerHTML = "<p class='muted'>No quote requests yet.</p>"; return; }
+
+  wrap.innerHTML = `<table><thead><tr>
+    <th>Date</th><th>Name / Company</th><th>Contact</th><th>Qty (t)</th><th>Country</th><th>Port</th>
+    <th>Delivery date</th><th>Requirements</th><th>Status</th><th>Deposit</th><th>Notes</th><th></th>
+  </tr></thead><tbody></tbody></table>`;
+  const tbody = wrap.querySelector("tbody");
+
+  rows.forEach(r => {
+    const tr = el(`<tr>
+      <td class="muted">${new Date(r.created_at).toLocaleDateString()}</td>
+      <td>${r.name}</td>
+      <td>${r.email}<br><span class="muted">${r.phone}</span></td>
+      <td>${r.quantity_tons}</td>
+      <td>${r.destination_country}</td>
+      <td>${r.delivery_port_city || "—"}</td>
+      <td>${r.delivery_date || "—"}</td>
+      <td style="max-width:220px">${(r.requirements || "—")}</td>
+      <td><select class="st">${STATUSES.map(s => `<option ${s===r.status?"selected":""}>${s}</option>`).join("")}</select></td>
+      <td><input class="cell dep" value="${r.deposit_amount || ""}" placeholder="e.g. 25000"></td>
+      <td><input class="cell notes" value="${r.admin_notes || ""}" placeholder="internal note"></td>
+      <td><button class="save">Save</button></td>
+    </tr>`);
+    tr.querySelector(".save").onclick = async () => {
+      const status = tr.querySelector(".st").value;
+      const deposit_amount = tr.querySelector(".dep").value;
+      const admin_notes = tr.querySelector(".notes").value;
+      await updateQuote(r.id, { status, deposit_amount, admin_notes });
+      tr.querySelector(".save").textContent = "Saved";
+      setTimeout(() => tr.querySelector(".save").textContent = "Save", 1200);
+    };
+    tbody.appendChild(tr);
+  });
+}
+
+function render(){ token ? renderDashboard() : renderLogin(); }
+render();
+</script>
+</body>
+</html>
