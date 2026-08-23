@@ -24,6 +24,27 @@ if (!JWT_SECRET) {
   process.exit(1);
 }
 
+// ---- Admin bootstrap ----
+// Railway can create/update the admin account automatically from environment
+// variables. The password is hashed and never stored as plain text.
+const ADMIN_USERNAME = (process.env.ADMIN_USERNAME || "").trim();
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
+
+if (ADMIN_USERNAME || ADMIN_PASSWORD) {
+  if (!ADMIN_USERNAME || !ADMIN_PASSWORD) {
+    console.error("ADMIN_USERNAME and ADMIN_PASSWORD must either both be set or both be omitted.");
+    process.exit(1);
+  }
+
+  const passwordHash = bcrypt.hashSync(ADMIN_PASSWORD, 10);
+  db.prepare(
+    `INSERT INTO admin_users (username, password_hash) VALUES (?, ?)
+     ON CONFLICT(username) DO UPDATE SET password_hash = excluded.password_hash`
+  ).run(ADMIN_USERNAME, passwordHash);
+
+  console.log(`Admin account configured from environment: ${ADMIN_USERNAME}`);
+}
+
 // ---- CORS ----
 // Comma-separated list of origins allowed to call this API, e.g.
 // ALLOWED_ORIGINS=https://globalmaizetrading.com,https://yourusername.github.io
