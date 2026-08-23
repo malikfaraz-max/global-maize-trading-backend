@@ -1,4 +1,13 @@
 require("dotenv").config();
+
+const nodeMajor = Number(process.versions.node.split(".")[0]);
+if (nodeMajor < 22) {
+  console.error(
+    `Unsupported Node.js ${process.versions.node}. This backend requires Node.js 22.x.`
+  );
+  process.exit(1);
+}
+
 const express = require("express");
 const cors = require("cors");
 const bcrypt = require("bcryptjs");
