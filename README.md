@@ -51,3 +51,16 @@ POST https://YOUR-RAILWAY-DOMAIN/api/quotes
 ```
 
 The frontend must be included in `ALLOWED_ORIGINS`.
+
+
+### Chad conversational AI
+Set `OPENAI_API_KEY` in Railway Variables. The key stays on the backend; the frontend calls `/api/chad`. Optionally set `CHAD_MODEL` (default: `gpt-5.6-luna`).
+
+## Chad open conversational assistant
+
+Add these Railway Variables:
+
+- `OPENAI_API_KEY` = your OpenAI API key (secret; backend only)
+- `CHAD_MODEL` = `gpt-5.6-luna` (optional; this is the default)
+
+The frontend calls `POST /api/chad`. Commercial questions are intercepted by the backend and return the company's WhatsApp/email contact information instead of being sent to the model.
